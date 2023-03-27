@@ -97,14 +97,14 @@ function generateFileContents(generationalPokedexes) {
         pokemonNumber === 1 ||
         (pokemonNumber - 1) % pokedex?.pokemonPerBox === 0
       ) {
-        fileContents.push(`   - box ${currentBox}`);
+        fileContents.push(`    - box ${currentBox}`);
 
         currentBox++;
         currentBoxPosition = 1;
       }
 
       fileContents.push(
-        `     ${currentBoxPosition}. ${pokemon} (#${pokemonNumber})`
+        `        ${currentBoxPosition}. ${pokemon} (#${pokemonNumber})`
       );
 
       currentBoxPosition++;
