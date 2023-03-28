@@ -1043,7 +1043,7 @@
         18. miraidon (#1008)
         19. walking-wake (#1009)
         20. iron-leaves (#1010)
-- generation 1 (red-blue, yellow)
+- generation 1 (red-blue, yellow, stadium, lets-go-pikachu-lets-go-eevee)
     - box 1
         1. bulbasaur (#1)
         2. ivysaur (#2)
@@ -1203,7 +1203,7 @@
         9. dragonite (#149)
         10. mewtwo (#150)
         11. mew (#151)
-- generation 2 (gold-silver, crystal)
+- generation 2 (gold-silver, crystal, stadium-2)
     - box 1
         1. bulbasaur (#1)
         2. ivysaur (#2)

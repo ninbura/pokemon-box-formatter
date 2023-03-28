@@ -69,11 +69,19 @@ async function getNationalPokedex() {
 }
 
 function getOldPokedexes(generations, sideVersions) {
-  const oldPokedexes = [];
+  const oldPokedexes = [],
+    exceptionalVersionsArray = [
+      [`stadium`, `lets-go-pikachu-lets-go-eevee`],
+      [`stadium-2`],
+    ];
 
   for (let index = 0; index < 7; index++) {
     const generation = generations[index],
-      applicableVersions = getApplicableVersions(generation, sideVersions);
+      applicableVersions = getApplicableVersions(generation, sideVersions),
+      exceptionalVersions = exceptionalVersionsArray[index];
+
+    if (exceptionalVersions?.length > 0)
+      applicableVersions.push(...exceptionalVersions);
 
     oldPokedexes.push({
       generation: `generation ${index + 1} (${applicableVersions.join(`, `)})`,
