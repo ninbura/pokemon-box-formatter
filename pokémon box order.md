@@ -1043,7 +1043,7 @@
         18. miraidon (#1008)
         19. walking-wake (#1009)
         20. iron-leaves (#1010)
-- generation 1 (red-blue, yellow, stadium, lets-go-pikachu-lets-go-eevee)
+- generation 1 (red-blue, yellow, stadium)
     - box 1
         1. bulbasaur (#1)
         2. ivysaur (#2)
