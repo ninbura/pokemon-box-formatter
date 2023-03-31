@@ -558,6 +558,5 @@
     - [ ] 16. rotom-frost (#479)
     - [ ] 17. rotom-fan (#479)
     - [ ] 18. rotom-mow (#479)
-    - [ ] 19. giratina-origin (#487)
-    - [ ] 20. shaymin-land (#492)
-    - [ ] 21. shaymin-sky (#492)
+    - [ ] 19. shaymin-land (#492)
+    - [ ] 20. shaymin-sky (#492)

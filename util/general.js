@@ -267,7 +267,7 @@ async function constructAdditionalPokedex(
   additionalPokedex.pokemon = pokemonSpecies.map((specimen) => {
     return {
       name: specimen?.name,
-      nationalNumber: getPokemonNumber(specimen?.url),
+      nationalNumber: getPokemonNumber(specimen?.url) * 1,
     };
   });
 
@@ -306,6 +306,8 @@ export async function generateAdditionalPokedexes(oldPokedexes) {
       letsGo: letsGoPokedex,
       legendsArceus: legendsArceusPokedex,
     };
+
+  console.log(pokemonBoxPokedex, letsGoPokedex);
 
   return additionalPokedexes;
 }
@@ -526,12 +528,14 @@ export function generateFileContents(generationalPokedexes) {
 
       pokemon?.[type]?.forEach((_pokemon, jndex) => {
         if (jndex === 0 || jndex % pokemonPerBox === 0) {
-          fileContents[index].content.push(`- [ ] ${boxName} ${currentBox}`);
-
-          if (
+          const exceptionalCondition =
             !generation.match(`lets-go-pikachu`) &&
-            !generation.match(`pokémon-ranch`)
-          ) {
+            !generation.match(`pokémon-ranch`);
+
+          if (exceptionalCondition || type === `standard`)
+            fileContents[index].content.push(`- [ ] ${boxName} ${currentBox}`);
+
+          if (exceptionalCondition) {
             currentBox++;
             currentBoxPosition = 1;
           }

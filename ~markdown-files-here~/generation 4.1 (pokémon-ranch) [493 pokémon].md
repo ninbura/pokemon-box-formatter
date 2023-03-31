@@ -492,7 +492,6 @@
     - [ ] 491. darkrai (#491)
     - [ ] 492. shaymin (#492)
     - [ ] 493. arceus (#493)
-- [ ] box 1
     - [ ] 494. unown-a (#201)
     - [ ] 495. unown-b (#201)
     - [ ] 496. unown-c (#201)
@@ -541,6 +540,5 @@
     - [ ] 539. rotom-frost (#479)
     - [ ] 540. rotom-fan (#479)
     - [ ] 541. rotom-mow (#479)
-    - [ ] 542. giratina-origin (#487)
-    - [ ] 543. shaymin-land (#492)
-    - [ ] 544. shaymin-sky (#492)
+    - [ ] 542. shaymin-land (#492)
+    - [ ] 543. shaymin-sky (#492)
