@@ -1,9 +1,10 @@
-import fs from "fs";
+import { readdirSync, rmSync, writeFile } from "fs";
+import path from "path";
 import Pokedex from "pokedex-promise-v2";
 import colosseumData from "../additional-data/colosseum.json" assert { type: "json" };
 import xdData from "../additional-data/xd.json" assert { type: "json" };
 import formExclusions from "../additional-data/form-exclusions.json" assert { type: "json" };
-import { extractRegionalVariantName } from "./regex.js";
+import compatiblePokemon from "../additional-data/compatible-pokemon.json" assert { type: "json" };
 import { root } from "../index.js";
 
 export const pokedex = new Pokedex(),
@@ -119,6 +120,21 @@ export function getOldPokedexes(generations, sideVersions) {
   return oldPokedexes;
 }
 
+export function getCompatiblePokemon() {
+  const _compatiblePokemon = compatiblePokemon.map((version) => {
+    const { versionName, compatiblePokemon } = version,
+      pokemonSpecies = compatiblePokemon?.map(
+        (pokemonNumber) =>
+          _nationalPokedex?.pokemon_entries?.[pokemonNumber - 1]
+            ?.pokemon_species
+      );
+
+    return { versionName: versionName, pokemonSpecies: pokemonSpecies };
+  });
+
+  return _compatiblePokemon;
+}
+
 function getPokemonNumber(url) {
   const urlSet = new Set(url.split(`/`)),
     urlArray = [...urlSet],
@@ -127,7 +143,11 @@ function getPokemonNumber(url) {
   return pokemonNumber;
 }
 
-export async function getNewPokedexes(generations, sideVersions) {
+export async function getNewPokedexes(
+  generations,
+  sideVersions,
+  compatiblePokemon
+) {
   const newPokedexes = [];
 
   for (let index = 7; index < generations.length; index++) {
@@ -140,6 +160,13 @@ export async function getNewPokedexes(generations, sideVersions) {
       generationNumber = index + 1,
       applicableVersions = getApplicableVersions(generation, sideVersions),
       applicableVersionString = applicableVersions.join(`, `);
+
+    compatiblePokemon.forEach((version) => {
+      const { versionName, pokemonSpecies: _pokemonSpecies } = version;
+
+      if (applicableVersionString.match(versionName))
+        pokemonSpecies.push(..._pokemonSpecies);
+    });
 
     pokemonSpecies.sort((a, b) => collator.compare(a?.url, b?.url));
 
@@ -202,21 +229,38 @@ function constructPokemonBox(oldPokedexes) {
     ),
     genThreePokedexCopy = JSON.parse(JSON.stringify(genThreePokedex));
 
-  genThreePokedexCopy.generation = `generation 3 (pokémon box)`;
+  genThreePokedexCopy.generation = `generation 3.3 (pokémon-box)`;
   genThreePokedexCopy.pokemonPerBox = 60;
 
   return genThreePokedexCopy;
 }
 
-async function constructAdditionalPokedex(region, generationName) {
+function constructPokemonRanch(oldPokedexes) {
+  const genFourPokedex = oldPokedexes.find((pokedex) =>
+      pokedex?.generation?.match(`diamond-pearl`)
+    ),
+    genFourPokedexCopy = JSON.parse(JSON.stringify(genFourPokedex));
+
+  genFourPokedexCopy.generation = `generation 4.1 (pokémon-ranch)`;
+  genFourPokedexCopy.pokemonPerBox = 1000;
+
+  return genFourPokedexCopy;
+}
+
+async function constructAdditionalPokedex(
+  region,
+  generationName,
+  pokemonPerBox = 30,
+  boxName = `box`
+) {
   const existingPokedex = await pokedex.getPokedexByName(region),
     pokemonSpecies = existingPokedex?.pokemon_entries.map(
       (entry) => entry?.pokemon_species
     ),
     additionalPokedex = {
       generation: generationName,
-      pokemonPerBox: 30,
-      boxName: `pasture`,
+      pokemonPerBox: pokemonPerBox,
+      boxName: boxName,
     };
   pokemonSpecies.sort((a, b) => collator.compare(a?.url, b?.url));
 
@@ -234,26 +278,85 @@ export async function generateAdditionalPokedexes(oldPokedexes) {
   const colosseumPokedex = constructCustomPokedex(
       nationalPokedex,
       colosseumData,
-      `generation 3 (colosseum)`
+      `generation 3.1 (colosseum)`
     ),
     xdPokedex = constructCustomPokedex(
       nationalPokedex,
       xdData,
-      `generation 3 (xd-gale-of-darkness)`
+      `generation 3.2 (xd-gale-of-darkness)`
     ),
     pokemonBoxPokedex = constructPokemonBox(oldPokedexes),
+    pokemonRanchPokedex = constructPokemonRanch(oldPokedexes),
+    letsGoPokedex = await constructAdditionalPokedex(
+      `letsgo-kanto`,
+      `generation 7.1 (lets-go-pikachu-lets-go-eevee)`,
+      1000
+    ),
     legendsArceusPokedex = await constructAdditionalPokedex(
       `hisui`,
-      `generation 8 (legends-arceus)`
+      `generation 8.1 (legends-arceus)`,
+      30,
+      `pasture`
     ),
     additionalPokedexes = {
       colosseum: colosseumPokedex,
       xd: xdPokedex,
       pokemonBox: pokemonBoxPokedex,
+      pokemonRanch: pokemonRanchPokedex,
+      letsGo: letsGoPokedex,
       legendsArceus: legendsArceusPokedex,
     };
 
   return additionalPokedexes;
+}
+
+//generation can be partial name
+function getGenerationSplicePosition(pokedexes, generation) {
+  const [desiredPokedex] = Object.entries(pokedexes).find(
+    ([index, pokedex]) => {
+      return pokedex?.generation?.match(generation);
+    }
+  );
+
+  return parseInt(desiredPokedex) + 1;
+}
+
+export function reorganizePokedexes(pokedexes, additionalPokedexes) {
+  const {
+      colosseum: colosseumPokedex,
+      xd: xdPokedex,
+      pokemonBox: pokemonBoxPokedex,
+      pokemonRanch: pokemonRanchPokedex,
+      letsGo: letsGoPokedex,
+      legendsArceus: legendsArceusPokedex,
+    } = additionalPokedexes,
+    generationThreeIndex = getGenerationSplicePosition(pokedexes, `emerald`);
+
+  pokedexes.splice(generationThreeIndex, 0, ...[colosseumPokedex, xdPokedex]);
+
+  const xdIndex = getGenerationSplicePosition(pokedexes, `xd-gale`);
+
+  pokedexes.splice(xdIndex, 0, pokemonBoxPokedex);
+
+  const generationFourIndex = getGenerationSplicePosition(
+    pokedexes,
+    `diamond-pearl`
+  );
+
+  pokedexes.splice(generationFourIndex, 0, pokemonRanchPokedex);
+
+  const generationSevenIndex = getGenerationSplicePosition(
+    pokedexes,
+    `sun-moon`
+  );
+
+  pokedexes.splice(generationSevenIndex, 0, letsGoPokedex);
+
+  const generationEightIndex = getGenerationSplicePosition(pokedexes, `sword`);
+
+  pokedexes.splice(generationEightIndex, 0, legendsArceusPokedex);
+
+  return pokedexes;
 }
 
 export async function getVariants() {
@@ -285,13 +388,14 @@ export async function getVariants() {
   });
 
   variants = variants.map((variant) => {
-    const { name, version_group, pokemon } = variant,
+    const { id, name, version_group, pokemon } = variant,
       pokemonName = standardPokemon.find((_pokemon) =>
         pokemon?.name.match(_pokemon)
       ),
       nationalNumber = nationalNumbers[pokemonName];
 
     return {
+      id: id,
       name: name,
       pokemonName: pokemonName,
       nationalNumber: nationalNumber,
@@ -300,7 +404,10 @@ export async function getVariants() {
   });
 
   variants.sort((a, b) => {
-    return collator.compare(a.nationalNumber, b.nationalNumber);
+    const aSort = `${a?.nationalNumber} ${a.id} ${a?.name}`,
+      bSort = `${b?.nationalNumber} ${b.id} ${b?.name}`;
+
+    return collator.compare(aSort, bSort);
   });
 
   generations.forEach((generation) => {
@@ -318,53 +425,21 @@ export async function getVariants() {
   return variants;
 }
 
-//generation can be partial name
-function getGenerationSplicePosition(pokedexes, generation) {
-  const [desiredPokedex] = Object.entries(pokedexes).find(
-    ([index, pokedex]) => {
-      return pokedex?.generation?.match(generation);
-    }
-  );
-
-  return parseInt(desiredPokedex) + 1;
-}
-
-export function reorganizePokedexes(pokedexes, additionalPokedexes) {
-  const {
-      colosseum: colosseumPokedex,
-      xd: xdPokedex,
-      pokemonBox: pokemonBoxPokedex,
-      legendsArceus: legendsArceusPokedex,
-    } = additionalPokedexes,
-    generationThreeIndex = getGenerationSplicePosition(pokedexes, `emerald`);
-
-  pokedexes.splice(generationThreeIndex, 0, ...[colosseumPokedex, xdPokedex]);
-
-  const xdIndex = getGenerationSplicePosition(pokedexes, `xd-gale`);
-
-  pokedexes.splice(xdIndex, 0, pokemonBoxPokedex);
-
-  const generationEightIndex = getGenerationSplicePosition(pokedexes, `sword`);
-
-  pokedexes.splice(generationEightIndex, 0, legendsArceusPokedex);
-
-  return pokedexes;
-}
-
 export function injectVariants(pokedexes, variants) {
   const variantObject = {};
 
   variants.forEach((variant) => {
-    const { name, nationalNumber, versionGroup } = variant;
+    const { id, name, nationalNumber, versionGroup } = variant;
 
     pokedexes.forEach((_pokedex, index) => {
       if (_pokedex.generation.match(versionGroup)) {
         if (!variantObject?.[index]) {
           variantObject[index] = [
-            { name: name, nationalNumber: nationalNumber },
+            { id: id, name: name, nationalNumber: nationalNumber },
           ];
         } else {
           variantObject[index].push({
+            id: id,
             name: name,
             nationalNumber: nationalNumber,
           });
@@ -373,34 +448,47 @@ export function injectVariants(pokedexes, variants) {
     });
   });
 
-  const exceptions = [`colosseum`, `xd-gale`];
+  const exceptions = [`gold-silver`, `colosseum`, `xd-gale`];
 
   for (const [index, _pokedex] of pokedexes.entries()) {
+    const { pokemon: standardPokemon } = _pokedex;
+
     if (exceptions.find((exception) => _pokedex?.generation.match(exception))) {
       _pokedex.pokemon = {
-        standard: _pokedex?.pokemon,
+        standard: standardPokemon,
         variant: [],
       };
 
       continue;
     }
 
-    const _variants = [];
+    let _variants = [];
 
-    for (let jndex = index; jndex > 0; jndex--) {
+    for (let jndex = index; jndex >= 0; jndex--) {
       const kndex = Object.keys(variantObject)[jndex];
 
-      if (index + 1 >= kndex) {
+      if (index >= kndex) {
         _variants.push(...variantObject[kndex]);
       }
     }
 
-    _variants.sort((a, b) =>
-      collator.compare(a?.nationalNumber, b?.nationalNumber)
+    const standardPokemonNumbers = standardPokemon?.map(
+      (pokemon) => pokemon?.nationalNumber
     );
 
+    _variants = _variants.filter((variant) =>
+      standardPokemonNumbers.includes(variant?.nationalNumber)
+    );
+
+    _variants.sort((a, b) => {
+      const aSort = `${a?.nationalNumber} ${a.id} ${a?.name}`,
+        bSort = `${b?.nationalNumber} ${b.id} ${b?.name}`;
+
+      return collator.compare(aSort, bSort);
+    });
+
     _pokedex.pokemon = {
-      standard: _pokedex?.pokemon,
+      standard: standardPokemon,
       variant: _variants,
     };
   }
@@ -434,15 +522,22 @@ export function generateFileContents(generationalPokedexes) {
     });
 
     [`standard`, `variant`].forEach((type) => {
-      pokedex?.pokemon?.[type]?.forEach((pokemon, jndex) => {
-        if (jndex === 0 || jndex % pokedex?.pokemonPerBox === 0) {
+      const { generation, pokemonPerBox, pokemon } = pokedex;
+
+      pokemon?.[type]?.forEach((_pokemon, jndex) => {
+        if (jndex === 0 || jndex % pokemonPerBox === 0) {
           fileContents[index].content.push(`- [ ] ${boxName} ${currentBox}`);
 
-          currentBox++;
-          currentBoxPosition = 1;
+          if (
+            !generation.match(`lets-go-pikachu`) &&
+            !generation.match(`pokémon-ranch`)
+          ) {
+            currentBox++;
+            currentBoxPosition = 1;
+          }
         }
 
-        const pokemonDisplayText = generatePokemonDisplayText(pokemon);
+        const pokemonDisplayText = generatePokemonDisplayText(_pokemon);
 
         fileContents[index].content.push(
           `    - [ ] ${currentBoxPosition}. ${pokemonDisplayText}`
@@ -450,20 +545,23 @@ export function generateFileContents(generationalPokedexes) {
 
         currentBoxPosition++;
       });
-
-      currentBox++;
-      currentBoxPosition = 1;
     });
   });
 
   return fileContents;
 }
 
+export function deleteExistingMarkdownFiles() {
+  const directory = `${root}/~markdown-files-here~`;
+
+  readdirSync(directory).forEach((file) => rmSync(`${directory}/${file}`));
+}
+
 export function generateMarkdownFiles(fileContents) {
   fileContents.forEach((fileContent) => {
     const { title, content } = fileContent;
 
-    fs.writeFile(
+    writeFile(
       `${root}/~markdown-files-here~/${title}.md`,
       content.join(`\n`),
       (error) => {

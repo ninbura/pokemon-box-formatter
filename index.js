@@ -15,13 +15,24 @@ import {
   getVariants,
   injectVariants,
   generateMarkdownFiles,
+  getCompatiblePokemon,
+  deleteExistingMarkdownFiles,
 } from "./util/general.js";
+
+// console.log(await pokedex.getPokedexList());
+
+// process.exit();
 
 export const root = path.dirname(fileURLToPath(import.meta.url));
 
 const sideVersions = await getSideVersions(),
   oldPokedexes = getOldPokedexes(generations, sideVersions),
-  newPokedexes = await getNewPokedexes(generations, sideVersions),
+  compatiblePokemon = getCompatiblePokemon(),
+  newPokedexes = await getNewPokedexes(
+    generations,
+    sideVersions,
+    compatiblePokemon
+  ),
   additionalPokedexes = await generateAdditionalPokedexes(oldPokedexes);
 
 let pokedexes = [...oldPokedexes, ...newPokedexes, nationalPokedex];
@@ -36,4 +47,5 @@ pokedexes = countPokemon(pokedexes);
 
 const fileContents = generateFileContents(pokedexes);
 
+deleteExistingMarkdownFiles();
 generateMarkdownFiles(fileContents);
