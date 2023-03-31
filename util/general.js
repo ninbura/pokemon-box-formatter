@@ -1,15 +1,12 @@
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import Pokedex from "pokedex-promise-v2";
 import colosseumData from "../additional-data/colosseum.json" assert { type: "json" };
 import xdData from "../additional-data/xd.json" assert { type: "json" };
-import regionalVariants from "../additional-data/regional-variants.json" assert { type: "json" };
 import formExclusions from "../additional-data/form-exclusions.json" assert { type: "json" };
 import { extractRegionalVariantName } from "./regex.js";
+import { root } from "../index.js";
 
-export const modulePath = path.dirname(fileURLToPath(import.meta.url)),
-  pokedex = new Pokedex(),
+export const pokedex = new Pokedex(),
   collator = new Intl.Collator(undefined, {
     numeric: true,
     sensitivity: "base",
@@ -259,27 +256,6 @@ export async function generateAdditionalPokedexes(oldPokedexes) {
   return additionalPokedexes;
 }
 
-// export async function getRegionalVariants() {
-//   const regionalVariantNames = pokemonNames
-//     .filter((pokemonName) =>
-//       Object.keys(regionalVariants).includes(
-//         extractRegionalVariantName(pokemonName?.name)
-//       )
-//     )
-//     .map((pokemonName) => {
-//       const { name } = pokemonName,
-//         region = extractRegionalVariantName(name),
-//         species = name?.substring(0, name.length - region.length - 1);
-//       return {
-//         name: name,
-//         ...regionalVariants[region],
-//         nationalNumber: nationalNumbers[species],
-//       };
-//     });
-
-//   return regionalVariantNames;
-// }
-
 export async function getVariants() {
   const standardPokemon = nationalPokedex?.pokemon?.map(
       (pokemon) => pokemon?.name
@@ -308,21 +284,36 @@ export async function getVariants() {
     );
   });
 
-  variants.sort((a, b) => {
-    const pokemonA = standardPokemon.find((pokemon) =>
-        a?.pokemon?.name.match(pokemon)
+  variants = variants.map((variant) => {
+    const { name, version_group, pokemon } = variant,
+      pokemonName = standardPokemon.find((_pokemon) =>
+        pokemon?.name.match(_pokemon)
       ),
-      pokemonB = standardPokemon.find((pokemon) =>
-        b?.pokemon?.name.match(pokemon)
-      );
+      nationalNumber = nationalNumbers[pokemonName];
 
-    return collator.compare(
-      nationalNumbers[pokemonA],
-      nationalNumbers[pokemonB]
-    );
+    return {
+      name: name,
+      pokemonName: pokemonName,
+      nationalNumber: nationalNumber,
+      versionGroup: version_group?.name,
+    };
   });
 
-  variants.forEach((variant) => console.log(variant?.name));
+  variants.sort((a, b) => {
+    return collator.compare(a.nationalNumber, b.nationalNumber);
+  });
+
+  generations.forEach((generation) => {
+    const { id, version_groups } = generation,
+      versionGroups = version_groups.map(
+        (version_group) => version_group?.name
+      );
+
+    for (const variant of variants) {
+      if (versionGroups.includes(variant.versionGroup))
+        variant.generationNumber = id;
+    }
+  });
 
   return variants;
 }
@@ -360,9 +351,66 @@ export function reorganizePokedexes(pokedexes, additionalPokedexes) {
   return pokedexes;
 }
 
+export function injectVariants(pokedexes, variants) {
+  const variantObject = {};
+
+  variants.forEach((variant) => {
+    const { name, nationalNumber, versionGroup } = variant;
+
+    pokedexes.forEach((_pokedex, index) => {
+      if (_pokedex.generation.match(versionGroup)) {
+        if (!variantObject?.[index]) {
+          variantObject[index] = [
+            { name: name, nationalNumber: nationalNumber },
+          ];
+        } else {
+          variantObject[index].push({
+            name: name,
+            nationalNumber: nationalNumber,
+          });
+        }
+      }
+    });
+  });
+
+  const exceptions = [`colosseum`, `xd-gale`];
+
+  for (const [index, _pokedex] of pokedexes.entries()) {
+    if (exceptions.find((exception) => _pokedex?.generation.match(exception))) {
+      _pokedex.pokemon = {
+        standard: _pokedex?.pokemon,
+        variant: [],
+      };
+
+      continue;
+    }
+
+    const _variants = [];
+
+    for (let jndex = index; jndex > 0; jndex--) {
+      const kndex = Object.keys(variantObject)[jndex];
+
+      if (index + 1 >= kndex) {
+        _variants.push(...variantObject[kndex]);
+      }
+    }
+
+    _variants.sort((a, b) =>
+      collator.compare(a?.nationalNumber, b?.nationalNumber)
+    );
+
+    _pokedex.pokemon = {
+      standard: _pokedex?.pokemon,
+      variant: _variants,
+    };
+  }
+
+  return pokedexes;
+}
+
 export function countPokemon(pokedexes) {
   for (const pokedex of pokedexes) {
-    const pokemonCount = pokedex?.pokemon?.length;
+    const pokemonCount = pokedex?.pokemon?.standard.length;
 
     pokedex.generation += ` [${pokemonCount} pokémon]`;
   }
@@ -373,42 +421,56 @@ export function countPokemon(pokedexes) {
 export function generateFileContents(generationalPokedexes) {
   const fileContents = [];
 
-  generationalPokedexes.forEach((pokedex) => {
+  generationalPokedexes.forEach((pokedex, index) => {
     let boxName = pokedex?.boxName,
       currentBox = 1,
       currentBoxPosition = 1;
 
     boxName = boxName ? boxName : `box`;
 
-    fileContents.push(`- ${pokedex?.generation}`);
+    fileContents.push({
+      title: pokedex?.generation,
+      content: [],
+    });
 
-    pokedex?.pokemon.forEach((pokemon, index) => {
-      if (index === 0 || index % pokedex?.pokemonPerBox === 0) {
-        fileContents.push(`    - ${boxName} ${currentBox}`);
+    [`standard`, `variant`].forEach((type) => {
+      pokedex?.pokemon?.[type]?.forEach((pokemon, jndex) => {
+        if (jndex === 0 || jndex % pokedex?.pokemonPerBox === 0) {
+          fileContents[index].content.push(`- [ ] ${boxName} ${currentBox}`);
 
-        currentBox++;
-        currentBoxPosition = 1;
-      }
+          currentBox++;
+          currentBoxPosition = 1;
+        }
 
-      const pokemonDisplayText = generatePokemonDisplayText(pokemon);
+        const pokemonDisplayText = generatePokemonDisplayText(pokemon);
 
-      fileContents.push(`        ${currentBoxPosition}. ${pokemonDisplayText}`);
+        fileContents[index].content.push(
+          `    - [ ] ${currentBoxPosition}. ${pokemonDisplayText}`
+        );
 
-      currentBoxPosition++;
+        currentBoxPosition++;
+      });
+
+      currentBox++;
+      currentBoxPosition = 1;
     });
   });
 
   return fileContents;
 }
 
-export function generateMarkdownFile(fileContentArray) {
-  fs.writeFile(
-    `./~markdown-file-here~/pokémon box order.md`,
-    fileContentArray.join(`\n`),
-    (error) => {
-      if (error) {
-        console.error(error);
+export function generateMarkdownFiles(fileContents) {
+  fileContents.forEach((fileContent) => {
+    const { title, content } = fileContent;
+
+    fs.writeFile(
+      `${root}/~markdown-files-here~/${title}.md`,
+      content.join(`\n`),
+      (error) => {
+        if (error) {
+          console.error(error);
+        }
       }
-    }
-  );
+    );
+  });
 }

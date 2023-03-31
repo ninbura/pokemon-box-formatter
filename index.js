@@ -1,3 +1,6 @@
+import path from "path";
+import { fileURLToPath } from "url";
+
 import {
   pokedex,
   generations,
@@ -6,29 +9,31 @@ import {
   getOldPokedexes,
   getNewPokedexes,
   generateFileContents,
-  generateMarkdownFile,
   generateAdditionalPokedexes,
   reorganizePokedexes,
   countPokemon,
-  // getRegionalVariants,
   getVariants,
+  injectVariants,
+  generateMarkdownFiles,
 } from "./util/general.js";
+
+export const root = path.dirname(fileURLToPath(import.meta.url));
 
 const sideVersions = await getSideVersions(),
   oldPokedexes = getOldPokedexes(generations, sideVersions),
   newPokedexes = await getNewPokedexes(generations, sideVersions),
   additionalPokedexes = await generateAdditionalPokedexes(oldPokedexes);
 
-let pokedexes = [nationalPokedex, ...oldPokedexes, ...newPokedexes];
+let pokedexes = [...oldPokedexes, ...newPokedexes, nationalPokedex];
 
 pokedexes = reorganizePokedexes(pokedexes, additionalPokedexes);
+
+const variants = await getVariants();
+
+pokedexes = injectVariants(pokedexes, variants);
+
 pokedexes = countPokemon(pokedexes);
 
-// const regionalVariants = await getRegionalVariants(nationalPokedex);
-const otherVariants = await getVariants();
+const fileContents = generateFileContents(pokedexes);
 
-process.exit();
-
-const fileContentArray = generateFileContents(pokedexes);
-
-generateMarkdownFile(fileContentArray);
+generateMarkdownFiles(fileContents);
