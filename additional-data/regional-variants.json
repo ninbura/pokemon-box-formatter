@@ -1,0 +1,6 @@
+{
+  "alola": { "generation": 7 },
+  "galar": { "generation": 8 },
+  "hisui": { "generation": 8, "subGeneration": 1 },
+  "paldea": { "generation": 9 }
+}

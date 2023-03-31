@@ -4,30 +4,47 @@ import { fileURLToPath } from "url";
 import Pokedex from "pokedex-promise-v2";
 import colosseumData from "../additional-data/colosseum.json" assert { type: "json" };
 import xdData from "../additional-data/xd.json" assert { type: "json" };
-import { Console } from "console";
+import regionalVariants from "../additional-data/regional-variants.json" assert { type: "json" };
+import formExclusions from "../additional-data/form-exclusions.json" assert { type: "json" };
+import { extractRegionalVariantName } from "./regex.js";
 
-const pokedex = new Pokedex(),
+export const modulePath = path.dirname(fileURLToPath(import.meta.url)),
+  pokedex = new Pokedex(),
   collator = new Intl.Collator(undefined, {
     numeric: true,
     sensitivity: "base",
   }),
-  modulePath = path.dirname(fileURLToPath(import.meta.url));
+  { results: generationNames } = await pokedex?.getGenerationsList(),
+  generations = await Promise.all(
+    generationNames?.map(
+      async (generationName) =>
+        await pokedex?.getGenerationByName(generationName?.name)
+    )
+  ),
+  { results: versionGroupNames } = await pokedex?.getVersionGroupsList(),
+  { results: pokemonNames } = await pokedex?.getPokemonsList(),
+  _nationalPokedex = await pokedex.getPokedexByName(`national`),
+  nationalPokedex = {
+    generation: `pokémon home`,
+    pokemonPerBox: 30,
+    pokemon: _nationalPokedex?.pokemon_entries?.map((entry) => {
+      const { pokemon_species: pokemonSpecies, entry_number: entryNumber } =
+        entry;
 
-export async function getGenerations() {
-  const { results: generationNames } = await pokedex.getGenerationsList(),
-    generations = Promise.all(
-      generationNames.map(
-        async (generationName) =>
-          await pokedex.getGenerationByName(generationName?.name)
-      )
-    );
-
-  return generations;
-}
+      return {
+        name: pokemonSpecies?.name,
+        nationalNumber: entryNumber,
+      };
+    }),
+  },
+  nationalNumbers = Object.assign(
+    ...nationalPokedex?.pokemon?.map((pokemon) => {
+      return { [pokemon?.name]: pokemon?.nationalNumber };
+    })
+  );
 
 export async function getSideVersions() {
-  const { results: versionGroupNames } = await pokedex.getVersionGroupsList(),
-    versionGroups = await Promise.all(
+  const versionGroups = await Promise.all(
       versionGroupNames.map(async (versionGroupName) =>
         pokedex.getVersionGroupByName(versionGroupName?.name)
       )
@@ -60,25 +77,6 @@ function getApplicableVersions(generation, sideVersions) {
   return applicableVersions;
 }
 
-export async function getNationalPokedex() {
-  const nationalDex = await pokedex.getPokedexByName(`national`),
-    nationalPokedex = {
-      generation: `pokémon home`,
-      pokemonPerBox: 30,
-      pokemon: nationalDex?.pokemon_entries?.map((entry) => {
-        const { pokemon_species: pokemonSpecies, entry_number: entryNumber } =
-          entry;
-
-        return {
-          name: pokemonSpecies?.name,
-          nationalNumber: entryNumber,
-        };
-      }),
-    };
-
-  return nationalPokedex;
-}
-
 export function getOldPokedexes(generations, sideVersions) {
   const oldPokedexes = [],
     exceptionalVersionsArray = [[`stadium`], [`stadium-2`]];
@@ -96,11 +94,10 @@ export function getOldPokedexes(generations, sideVersions) {
       applicableVersionString = applicableVersions.join(`, `),
       previousPokedex = oldPokedexes[index - 1]?.pokemon,
       nationalPokemon = previousPokedex ? previousPokedex : [],
-      previousPokedexLength = nationalPokemon.length,
-      pokemonCount = previousPokedexLength + pokemonSpecies.length;
+      previousPokedexLength = nationalPokemon.length;
 
     oldPokedexes.push({
-      generation: `generation ${generationNumber} (${applicableVersionString}) [${pokemonCount} pokémon]`,
+      generation: `generation ${generationNumber} (${applicableVersionString})`,
       pokemonPerBox: index <= 1 ? 20 : 30,
       pokemon: [],
     });
@@ -145,13 +142,12 @@ export async function getNewPokedexes(generations, sideVersions) {
       ),
       generationNumber = index + 1,
       applicableVersions = getApplicableVersions(generation, sideVersions),
-      applicableVersionString = applicableVersions.join(`, `),
-      pokemonCount = pokemonSpecies.length;
+      applicableVersionString = applicableVersions.join(`, `);
 
     pokemonSpecies.sort((a, b) => collator.compare(a?.url, b?.url));
 
     newPokedexes.push({
-      generation: `generation ${generationNumber} (${applicableVersionString}) [${pokemonCount} pokémon]`,
+      generation: `generation ${generationNumber} (${applicableVersionString})`,
       pokemonPerBox: 30,
     });
 
@@ -183,21 +179,36 @@ function generatePokemonDisplayText(pokemon) {
   return pokemonDisplayText;
 }
 
-function constructCustomPokedex(nationalDex, additionalData, generationName) {
-  const pokemonCount = additionalData.length,
-    additionalPokedex = {
-      generation: `${generationName} [${pokemonCount} pokémon]`,
-      pokemonPerBox: 30,
-      pokemon: additionalData.map((nationalNumbers) => {
-        const pokemonArray = nationalNumbers.map(
-          (nationalNumber) => nationalDex?.pokemon[nationalNumber - 1]?.name
-        );
+function constructCustomPokedex(
+  nationalPokedex,
+  additionalData,
+  generationName
+) {
+  const additionalPokedex = {
+    generation: generationName,
+    pokemonPerBox: 30,
+    pokemon: additionalData.map((nationalNumbers) => {
+      const pokemonArray = nationalNumbers.map(
+        (nationalNumber) => nationalPokedex?.pokemon[nationalNumber - 1]?.name
+      );
 
-        return { name: pokemonArray, nationalNumber: nationalNumbers };
-      }),
-    };
+      return { name: pokemonArray, nationalNumber: nationalNumbers };
+    }),
+  };
 
   return additionalPokedex;
+}
+
+function constructPokemonBox(oldPokedexes) {
+  const genThreePokedex = oldPokedexes.find((pokedex) =>
+      pokedex?.generation?.match(`emerald`)
+    ),
+    genThreePokedexCopy = JSON.parse(JSON.stringify(genThreePokedex));
+
+  genThreePokedexCopy.generation = `generation 3 (pokémon box)`;
+  genThreePokedexCopy.pokemonPerBox = 60;
+
+  return genThreePokedexCopy;
 }
 
 async function constructAdditionalPokedex(region, generationName) {
@@ -205,9 +216,8 @@ async function constructAdditionalPokedex(region, generationName) {
     pokemonSpecies = existingPokedex?.pokemon_entries.map(
       (entry) => entry?.pokemon_species
     ),
-    pokemonCount = pokemonSpecies.length,
     additionalPokedex = {
-      generation: `${generationName} [${pokemonCount} pokémon]`,
+      generation: generationName,
       pokemonPerBox: 30,
       boxName: `pasture`,
     };
@@ -223,17 +233,18 @@ async function constructAdditionalPokedex(region, generationName) {
   return additionalPokedex;
 }
 
-export async function generateAdditionalPokedexes(nationalDex) {
+export async function generateAdditionalPokedexes(oldPokedexes) {
   const colosseumPokedex = constructCustomPokedex(
-      nationalDex,
+      nationalPokedex,
       colosseumData,
       `generation 3 (colosseum)`
     ),
     xdPokedex = constructCustomPokedex(
-      nationalDex,
+      nationalPokedex,
       xdData,
       `generation 3 (xd-gale-of-darkness)`
     ),
+    pokemonBoxPokedex = constructPokemonBox(oldPokedexes),
     legendsArceusPokedex = await constructAdditionalPokedex(
       `hisui`,
       `generation 8 (legends-arceus)`
@@ -241,10 +252,79 @@ export async function generateAdditionalPokedexes(nationalDex) {
     additionalPokedexes = {
       colosseum: colosseumPokedex,
       xd: xdPokedex,
+      pokemonBox: pokemonBoxPokedex,
       legendsArceus: legendsArceusPokedex,
     };
 
   return additionalPokedexes;
+}
+
+// export async function getRegionalVariants() {
+//   const regionalVariantNames = pokemonNames
+//     .filter((pokemonName) =>
+//       Object.keys(regionalVariants).includes(
+//         extractRegionalVariantName(pokemonName?.name)
+//       )
+//     )
+//     .map((pokemonName) => {
+//       const { name } = pokemonName,
+//         region = extractRegionalVariantName(name),
+//         species = name?.substring(0, name.length - region.length - 1);
+//       return {
+//         name: name,
+//         ...regionalVariants[region],
+//         nationalNumber: nationalNumbers[species],
+//       };
+//     });
+
+//   return regionalVariantNames;
+// }
+
+export async function getVariants() {
+  const standardPokemon = nationalPokedex?.pokemon?.map(
+      (pokemon) => pokemon?.name
+    ),
+    { forms: excludedForms, pokemon: excludedPokemon } = formExclusions;
+
+  let { results: formsList } = await pokedex?.getPokemonFormsList();
+
+  formsList = formsList?.filter((form) => {
+    const { name } = form;
+
+    return !standardPokemon?.includes(name) && !excludedForms.includes(name);
+  });
+
+  let variants = await Promise.all(
+    formsList?.map(
+      async (form) => await pokedex?.getPokemonFormByName(form?.name)
+    )
+  );
+
+  variants = variants.filter((variant) => {
+    const { is_battle_only, is_mega, pokemon } = variant;
+
+    return (
+      !is_battle_only && !is_mega && !excludedPokemon.includes(pokemon?.name)
+    );
+  });
+
+  variants.sort((a, b) => {
+    const pokemonA = standardPokemon.find((pokemon) =>
+        a?.pokemon?.name.match(pokemon)
+      ),
+      pokemonB = standardPokemon.find((pokemon) =>
+        b?.pokemon?.name.match(pokemon)
+      );
+
+    return collator.compare(
+      nationalNumbers[pokemonA],
+      nationalNumbers[pokemonB]
+    );
+  });
+
+  variants.forEach((variant) => console.log(variant?.name));
+
+  return variants;
 }
 
 //generation can be partial name
@@ -259,21 +339,33 @@ function getGenerationSplicePosition(pokedexes, generation) {
 }
 
 export function reorganizePokedexes(pokedexes, additionalPokedexes) {
-  const generationThreeIndex = getGenerationSplicePosition(
-      pokedexes,
-      `emerald`
-    ),
-    {
+  const {
       colosseum: colosseumPokedex,
       xd: xdPokedex,
+      pokemonBox: pokemonBoxPokedex,
       legendsArceus: legendsArceusPokedex,
-    } = additionalPokedexes;
+    } = additionalPokedexes,
+    generationThreeIndex = getGenerationSplicePosition(pokedexes, `emerald`);
 
   pokedexes.splice(generationThreeIndex, 0, ...[colosseumPokedex, xdPokedex]);
+
+  const xdIndex = getGenerationSplicePosition(pokedexes, `xd-gale`);
+
+  pokedexes.splice(xdIndex, 0, pokemonBoxPokedex);
 
   const generationEightIndex = getGenerationSplicePosition(pokedexes, `sword`);
 
   pokedexes.splice(generationEightIndex, 0, legendsArceusPokedex);
+
+  return pokedexes;
+}
+
+export function countPokemon(pokedexes) {
+  for (const pokedex of pokedexes) {
+    const pokemonCount = pokedex?.pokemon?.length;
+
+    pokedex.generation += ` [${pokemonCount} pokémon]`;
+  }
 
   return pokedexes;
 }
