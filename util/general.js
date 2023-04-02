@@ -307,8 +307,6 @@ export async function generateAdditionalPokedexes(oldPokedexes) {
       legendsArceus: legendsArceusPokedex,
     };
 
-  console.log(pokemonBoxPokedex, letsGoPokedex);
-
   return additionalPokedexes;
 }
 
@@ -450,7 +448,7 @@ export function injectVariants(pokedexes, variants) {
     });
   });
 
-  const exceptions = [`gold-silver`, `colosseum`, `xd-gale`];
+  const exceptions = [`colosseum`, `xd-gale`];
 
   for (const [index, _pokedex] of pokedexes.entries()) {
     const { pokemon: standardPokemon } = _pokedex;
@@ -530,7 +528,8 @@ export function generateFileContents(generationalPokedexes) {
         if (jndex === 0 || jndex % pokemonPerBox === 0) {
           const exceptionalCondition =
             !generation.match(`lets-go-pikachu`) &&
-            !generation.match(`pokémon-ranch`);
+            !generation.match(`pokémon-ranch`) &&
+            !generation.match(`gold-silver`);
 
           if (exceptionalCondition || type === `standard`)
             fileContents[index].content.push(`- [ ] ${boxName} ${currentBox}`);
@@ -544,7 +543,7 @@ export function generateFileContents(generationalPokedexes) {
         const pokemonDisplayText = generatePokemonDisplayText(_pokemon);
 
         fileContents[index].content.push(
-          `    - [ ] ${currentBoxPosition}. ${pokemonDisplayText}`
+          `    - [ ] ${currentBoxPosition} - ${pokemonDisplayText}`
         );
 
         currentBoxPosition++;
