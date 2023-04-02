@@ -487,10 +487,17 @@ export function injectVariants(pokedexes, variants) {
       return collator.compare(aSort, bSort);
     });
 
-    _pokedex.pokemon = {
-      standard: standardPokemon,
-      variant: _variants,
-    };
+    if (_pokedex.generation.match(`gold-silver`)) {
+      _pokedex.pokemon = {
+        standard: [...standardPokemon, ..._variants],
+        variant: [],
+      };
+    } else {
+      _pokedex.pokemon = {
+        standard: standardPokemon,
+        variant: _variants,
+      };
+    }
   }
 
   return pokedexes;
@@ -528,8 +535,7 @@ export function generateFileContents(generationalPokedexes) {
         if (jndex === 0 || jndex % pokemonPerBox === 0) {
           const exceptionalCondition =
             !generation.match(`lets-go-pikachu`) &&
-            !generation.match(`pokémon-ranch`) &&
-            !generation.match(`gold-silver`);
+            !generation.match(`pokémon-ranch`);
 
           if (exceptionalCondition || type === `standard`)
             fileContents[index].content.push(`- [ ] ${boxName} ${currentBox}`);
